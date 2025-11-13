@@ -1,6 +1,6 @@
 import importlib
 import os
-from lara.datas.dataset import DummyDataset
+from lara.data.dataset import DummyDataset
 from pytorch_lightning import LightningDataModule
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader

@@ -3,7 +3,7 @@ defaults:
 
 # Override data module to use BehaviorLeRobotDataset for evaluation
 data:
-  _target_: lara.datas.BehaviorDataModule
+  _target_: lara.data.BehaviorDataModule
   data_path: ${oc.env:DATA_DIR}  # Read from .env file
   batch_size: 1  # Process one frame at a time for eval GT generation
   val_batch_size: 1

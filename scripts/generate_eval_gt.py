@@ -9,7 +9,7 @@ from pathlib import Path
 
 # Get the project root directory (parent of scripts/)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CONFIG_DIR = PROJECT_ROOT / "config"
+CONFIG_DIR = PROJECT_ROOT / "configs"
 
 
 def setup(cfg: DictConfig):
