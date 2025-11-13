@@ -1,0 +1,50 @@
+defaults:
+  - base_config
+
+# Override data module to use BehaviorLeRobotDataset for evaluation
+data:
+  _target_: lara.datas.BehaviorDataModule
+  data_path: ${oc.env:DATA_DIR}  # Read from .env file
+  batch_size: 1  # Process one frame at a time for eval GT generation
+  val_batch_size: 1
+  val_split_ratio: 0.1
+  dataloader_num_workers: 1
+  max_num_demos: null
+  dataset_class: omnigibson.learning.datas.BehaviorLeRobotDataset
+  # Dataset-specific parameters (passed via **kwargs to dataset)
+  repo_id: "behavior-1k/2025-challenge-demos"
+  episodes: range(5)  # null = all episodes, or use range(N) for first N episodes, or [0, 2, 5] for specific episodes
+  modalities: ["rgb", "depth", "seg_instance_id"]  # Modalities to load
+  cameras: ["head"]  # Cameras to load
+  local_only: false  # Set to true to avoid downloading from HuggingFace
+  force_cache_sync: true  # Force sync cache with HuggingFace (set false after first download)
+  chunk_streaming_using_keyframe: true  # Efficient data access
+  # Temporal queries for proprioceptive history
+  history_length: 3  # Number of past states/actions to include
+  delta_timestamps:
+    observation.state: [-0.0667, -0.0333, 0.0]  # Last 3 states at 30Hz
+    action: [-0.0667, -0.0333, 0.0]  # Last 3 actions at 30Hz
+  # Camera configuration for eval (which camera view to use in LLM)
+  camera_view: "head"  # Which camera to use: "head", "left_wrist", "right_wrist"
+
+# LLM Interface Configuration
+llm_interface:
+  _target_: lara.llm_evaluator.llm_interface.LLMInterface
+  model: "claude-3-haiku-20240307"  # Cheapest Claude model
+  temperature: 0.7
+  max_tokens: 500
+  api_key_env: "ANTHROPIC_API_KEY"
+
+# Writer Configuration
+writer:
+  _target_: lara.llm_evaluator.writer.Writer
+  output_dir: "${hydra:runtime.cwd}/eval_outputs"
+  output_filename: "eval_gt.jsonl"
+  metadata_filename: "metadata.json"
+
+# Evaluation specific parameters
+eval:
+  use_stuck_detection: true  # Include stuck detection in prompts
+  velocity_threshold: 0.01  # Threshold for detecting if robot is stuck
+  save_images: false  # Whether to save images alongside JSONL
+  image_dir: "${hydra:runtime.cwd}/eval_outputs/images"
