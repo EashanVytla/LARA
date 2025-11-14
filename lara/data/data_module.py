@@ -70,8 +70,14 @@ class BehaviorDataModule(LightningDataModule):
                     train_episodes = None
                     val_episodes = None
 
+                # Filter out kwargs that are specific to BehaviorIterableDataset
+                lerobot_incompatible_keys = {'downsample_factor', 'robot_type', 'obs_window_size',
+                                             'ctx_len', 'use_task_info', 'task_info_range',
+                                             'multi_view_cameras'}
+
                 # Create train dataset
-                train_kwargs = self._kwargs.copy()
+                train_kwargs = {k: v for k, v in self._kwargs.items()
+                               if k not in lerobot_incompatible_keys}
                 train_kwargs['episodes'] = train_episodes
                 self._train_dataset = DatasetClassModule(
                     root=self._data_path,
@@ -79,7 +85,8 @@ class BehaviorDataModule(LightningDataModule):
                 )
 
                 # Create val dataset
-                val_kwargs = self._kwargs.copy()
+                val_kwargs = {k: v for k, v in self._kwargs.items()
+                             if k not in lerobot_incompatible_keys}
                 val_kwargs['episodes'] = val_episodes
                 self._val_dataset = DatasetClassModule(
                     root=self._data_path,
