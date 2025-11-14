@@ -14,11 +14,12 @@ data:
   dataset_class: omnigibson.learning.datas.BehaviorLeRobotDataset
   # Dataset-specific parameters (passed via **kwargs to dataset)
   repo_id: "behavior-1k/2025-challenge-demos"
+  tasks: ["picking_up_trash"]  # List of task names to load, or null for all tasks
   episodes: 5  # null = all episodes, or use range(N) for first N episodes, or [0, 2, 5] for specific episodes
   modalities: ["rgb", "depth", "seg_instance_id"]  # Modalities to load
   cameras: ["head"]  # Cameras to load
   local_only: false  # Set to true to avoid downloading from HuggingFace
-  force_cache_sync: false  # Force sync cache with HuggingFace (set false after first download)
+  force_cache_sync: true  # Force sync cache with HuggingFace (set false after first download)
   chunk_streaming_using_keyframe: true  # Efficient data access
   # Temporal queries for proprioceptive history
   delta_timestamps:
