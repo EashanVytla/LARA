@@ -54,16 +54,22 @@ class BehaviorDataModule(LightningDataModule):
                 # Get episodes from kwargs (None means all episodes)
                 episodes = self._kwargs.get('episodes', None)
 
+                # Convert OmegaConf ListConfig or range objects to proper Python list of ints
+                if episodes is not None:
+                    # Handle OmegaConf containers
+                    from omegaconf import ListConfig
+                    if isinstance(episodes, ListConfig):
+                        episodes = list(episodes)
+                    elif hasattr(episodes, '__iter__') and not isinstance(episodes, (list, tuple)):
+                        episodes = list(episodes)
+                    # Ensure all elements are integers (not strings)
+                    episodes = [int(ep) for ep in episodes]
+
                 if not self._split_dataset:
                     # No split: use all data for validation only
-                    if episodes is not None and hasattr(episodes, '__iter__') and not isinstance(episodes, (list, tuple)):
-                        episodes = list(episodes)
                     train_episodes = None  # No training data
                     val_episodes = episodes
                 elif episodes is not None:
-                    # Convert range to list if needed
-                    if hasattr(episodes, '__iter__') and not isinstance(episodes, (list, tuple)):
-                        episodes = list(episodes)
 
                     # Split episodes into train/val
                     train_episodes, val_episodes = train_test_split(
