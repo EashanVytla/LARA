@@ -7,7 +7,7 @@ data:
   data_path: ${oc.env:DATA_DIR}  # Read from .env file
   batch_size: 1  # Process one frame at a time for eval GT generation
   val_batch_size: 1
-  val_split_ratio: 0.1
+  val_split_ratio: 1.0
   dataloader_num_workers: 1
   max_num_demos: null
   dataset_class: omnigibson.learning.datas.BehaviorLeRobotDataset
@@ -20,7 +20,6 @@ data:
   force_cache_sync: true  # Force sync cache with HuggingFace (set false after first download)
   chunk_streaming_using_keyframe: true  # Efficient data access
   # Temporal queries for proprioceptive history
-  history_length: 3  # Number of past states/actions to include
   delta_timestamps:
     observation.state: [-0.0667, -0.0333, 0.0]  # Last 3 states at 30Hz
     action: [-0.0667, -0.0333, 0.0]  # Last 3 actions at 30Hz
