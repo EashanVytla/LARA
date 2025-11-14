@@ -20,6 +20,7 @@ class BehaviorDataModule(LightningDataModule):
         seed: int,
         max_num_demos: Optional[int] = None,
         dataset_class: str,
+        split_dataset: bool = True,  # If False, use all data for val only
         **kwargs,
     ):
         super().__init__()
@@ -32,6 +33,7 @@ class BehaviorDataModule(LightningDataModule):
         self._max_num_demos = max_num_demos
         self._seed = seed
         self._dataset_class = dataset_class
+        self._split_dataset = split_dataset
         # store args and kwargs for dataset initialization
         self._args = args
         self._kwargs = kwargs
@@ -52,7 +54,13 @@ class BehaviorDataModule(LightningDataModule):
                 # Get episodes from kwargs (None means all episodes)
                 episodes = self._kwargs.get('episodes', None)
 
-                if episodes is not None:
+                if not self._split_dataset:
+                    # No split: use all data for validation only
+                    if episodes is not None and hasattr(episodes, '__iter__') and not isinstance(episodes, (list, tuple)):
+                        episodes = list(episodes)
+                    train_episodes = None  # No training data
+                    val_episodes = episodes
+                elif episodes is not None:
                     # Convert range to list if needed
                     if hasattr(episodes, '__iter__') and not isinstance(episodes, (list, tuple)):
                         episodes = list(episodes)
@@ -75,14 +83,18 @@ class BehaviorDataModule(LightningDataModule):
                                              'ctx_len', 'use_task_info', 'task_info_range',
                                              'multi_view_cameras'}
 
-                # Create train dataset
-                train_kwargs = {k: v for k, v in self._kwargs.items()
-                               if k not in lerobot_incompatible_keys}
-                train_kwargs['episodes'] = train_episodes
-                self._train_dataset = DatasetClassModule(
-                    root=self._data_path,
-                    **train_kwargs,
-                )
+                # Create train dataset (only if splitting)
+                if self._split_dataset and train_episodes is not None:
+                    train_kwargs = {k: v for k, v in self._kwargs.items()
+                                   if k not in lerobot_incompatible_keys}
+                    train_kwargs['episodes'] = train_episodes
+                    self._train_dataset = DatasetClassModule(
+                        root=self._data_path,
+                        **train_kwargs,
+                    )
+                else:
+                    # Create a dummy train dataset to satisfy assertions
+                    self._train_dataset = None
 
                 # Create val dataset
                 val_kwargs = {k: v for k, v in self._kwargs.items()
