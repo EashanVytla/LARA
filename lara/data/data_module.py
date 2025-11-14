@@ -1,10 +1,13 @@
 import importlib
 import os
+import logging
 from lara.data.dataset import DummyDataset
 from pytorch_lightning import LightningDataModule
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class BehaviorDataModule(LightningDataModule):
@@ -95,6 +98,7 @@ class BehaviorDataModule(LightningDataModule):
                     train_kwargs = {k: v for k, v in self._kwargs.items()
                                    if k not in lerobot_incompatible_keys}
                     train_kwargs['episodes'] = train_episodes
+                    logger.info(f"Creating train dataset with episodes: {train_episodes}")
                     self._train_dataset = DatasetClassModule(
                         root=self._data_path,
                         **train_kwargs,
@@ -107,6 +111,7 @@ class BehaviorDataModule(LightningDataModule):
                 val_kwargs = {k: v for k, v in self._kwargs.items()
                              if k not in lerobot_incompatible_keys}
                 val_kwargs['episodes'] = val_episodes
+                logger.info(f"Creating val dataset with episodes: {val_episodes}")
                 self._val_dataset = DatasetClassModule(
                     root=self._data_path,
                     **val_kwargs,
