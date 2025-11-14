@@ -53,6 +53,9 @@ def extract_batch_data(batch: dict, cameras: list[str]):
     Returns:
         Dictionary with extracted data
     """
+    # Debug: print available keys
+    print(f"Available batch keys: {list(batch.keys())}")
+
     # Get RGB images from all cameras
     rgb_images = {}
     for camera in cameras:
@@ -63,7 +66,7 @@ def extract_batch_data(batch: dict, cameras: list[str]):
     task = batch["task"][0] if isinstance(batch["task"], list) else batch["task"]
     task_index = batch["task_index"][0].item()
     episode_index = batch["episode_index"][0].item()
-    frame_index = batch["frame_index"][0].item()
+    frame_index = batch.get("frame_index", batch.get("index", [0]))[0].item()  # Fallback to 'index' if 'frame_index' doesn't exist
     timestamp = batch["timestamp"][0].item()
 
     # Get state and action history
