@@ -43,30 +43,74 @@ class BehaviorDataModule(LightningDataModule):
             # get dataset class module
             module_path, class_name = self._dataset_class.rsplit(".", 1)
             DatasetClassModule = getattr(importlib.import_module(module_path), class_name)
-            all_demo_keys = DatasetClassModule.get_all_demo_keys(self._data_path, self._task_name)
-            # limit number of demos
-            if self._max_num_demos is not None:
-                all_demo_keys = all_demo_keys[: self._max_num_demos]
-            self._train_demo_keys, self._val_demo_keys = train_test_split(
-                all_demo_keys,
-                test_size=self._val_split_ratio,
-                random_state=self._seed,
-            )
-            # initialize datasets
-            self._train_dataset = DatasetClassModule(
-                *self._args,
-                **self._kwargs,
-                data_path=self._data_path,
-                demo_keys=self._train_demo_keys,
-                seed=self._seed,
-            )
-            self._val_dataset = DatasetClassModule(
-                *self._args,
-                **self._kwargs,
-                data_path=self._data_path,
-                demo_keys=self._val_demo_keys,
-                seed=self._seed,
-            )
+
+            # Check if this is BehaviorLeRobotDataset
+            is_lerobot = "LeRobot" in class_name or "lerobot" in self._dataset_class.lower()
+
+            if is_lerobot:
+                # BehaviorLeRobotDataset: split episodes into train/val
+                # Get episodes from kwargs (None means all episodes)
+                episodes = self._kwargs.get('episodes', None)
+
+                if episodes is not None:
+                    # Convert range to list if needed
+                    if hasattr(episodes, '__iter__') and not isinstance(episodes, (list, tuple)):
+                        episodes = list(episodes)
+
+                    # Split episodes into train/val
+                    train_episodes, val_episodes = train_test_split(
+                        episodes,
+                        test_size=self._val_split_ratio,
+                        random_state=self._seed,
+                    )
+                else:
+                    # episodes=None means use all data
+                    # For train/val split, we'll use the same dataset for both
+                    # (the actual split would need to be done differently)
+                    train_episodes = None
+                    val_episodes = None
+
+                # Create train dataset
+                train_kwargs = self._kwargs.copy()
+                train_kwargs['episodes'] = train_episodes
+                self._train_dataset = DatasetClassModule(
+                    root=self._data_path,
+                    **train_kwargs,
+                )
+
+                # Create val dataset
+                val_kwargs = self._kwargs.copy()
+                val_kwargs['episodes'] = val_episodes
+                self._val_dataset = DatasetClassModule(
+                    root=self._data_path,
+                    **val_kwargs,
+                )
+            else:
+                # BehaviorIterableDataset: uses traditional demo_keys approach
+                all_demo_keys = DatasetClassModule.get_all_demo_keys(self._data_path, self._task_name)
+                # limit number of demos
+                if self._max_num_demos is not None:
+                    all_demo_keys = all_demo_keys[: self._max_num_demos]
+                self._train_demo_keys, self._val_demo_keys = train_test_split(
+                    all_demo_keys,
+                    test_size=self._val_split_ratio,
+                    random_state=self._seed,
+                )
+                # initialize datasets
+                self._train_dataset = DatasetClassModule(
+                    *self._args,
+                    **self._kwargs,
+                    data_path=self._data_path,
+                    demo_keys=self._train_demo_keys,
+                    seed=self._seed,
+                )
+                self._val_dataset = DatasetClassModule(
+                    *self._args,
+                    **self._kwargs,
+                    data_path=self._data_path,
+                    demo_keys=self._val_demo_keys,
+                    seed=self._seed,
+                )
 
     def train_dataloader(self) -> DataLoader:
         assert self._train_dataset is not None
