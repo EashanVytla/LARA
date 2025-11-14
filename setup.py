@@ -9,6 +9,7 @@ setup(
     packages=find_packages(),
     python_requires=">=3.10",
     install_requires=[
+        "av",
         # Core dependencies
         "torch>=2.0.0",
         "numpy>=1.24.0",
@@ -25,6 +26,10 @@ setup(
         "torchvision>=0.15.0",
         "pytorch-lightning>=2.0.0",
         "scikit-learn>=1.3.0",
+        "datasets",
+        "lerobot",
+        "huggingface-hub",
+        "pyarrow"
     ],
     extras_require={
         "dev": [
