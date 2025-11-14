@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import torch
 from tqdm import tqdm
 from pathlib import Path
+import traceback
 
 # Get the project root directory (parent of scripts/)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -156,7 +157,8 @@ def main(cfg: DictConfig):
                             torchvision.utils.save_image(rgb_img, image_path)
 
                 except Exception as e:
-                    print(f"\n⚠️  Error processing batch {batch_idx}: {str(e)}")
+                    print(f"\nError processing batch {batch_idx}:")
+                    traceback.print_exc()
                     continue
 
     except KeyboardInterrupt:
