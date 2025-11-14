@@ -200,7 +200,7 @@ Subtask description:"""
 
     def predict_subtask(
         self,
-        rgb: np.ndarray,
+        rgb_images: dict[str, np.ndarray],
         task: str,
         states: torch.Tensor,
         actions: torch.Tensor,
@@ -213,7 +213,7 @@ Subtask description:"""
         Generate subtask ground truth using Claude API.
 
         Args:
-            rgb: RGB image as numpy array, shape (3, H, W) or (H, W, 3)
+            rgb_images: Dictionary of RGB images {camera_name: image}, each shape (3, H, W) or (H, W, 3)
             task: High-level task description
             states: State history tensor, shape (T, state_dim)
             actions: Action history tensor, shape (T, action_dim)
@@ -225,8 +225,8 @@ Subtask description:"""
         Returns:
             Natural language subtask description
         """
-        # Encode image
-        image_b64 = self._encode_image(rgb)
+        # Encode all images
+        encoded_images = {cam: self._encode_image(rgb) for cam, rgb in rgb_images.items()}
 
         # Build prompt
         prompt = self._build_prompt(
@@ -239,6 +239,22 @@ Subtask description:"""
             action_is_pad=action_is_pad,
         )
 
+        # Build content with multiple images
+        content = []
+        for image_b64 in encoded_images.values():
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": image_b64,
+                },
+            })
+        content.append({
+            "type": "text",
+            "text": f"Camera views: {', '.join(encoded_images.keys())}\n\n{prompt}"
+        })
+
         # Call Claude API
         try:
             message = self.client.messages.create(
@@ -248,20 +264,7 @@ Subtask description:"""
                 messages=[
                     {
                         "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/png",
-                                    "data": image_b64,
-                                },
-                            },
-                            {
-                                "type": "text",
-                                "text": prompt,
-                            },
-                        ],
+                        "content": content,
                     }
                 ],
             )

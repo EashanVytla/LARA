@@ -41,20 +41,22 @@ def setup(cfg: DictConfig):
     return data_module, llm_interface, writer
 
 
-def extract_batch_data(batch: dict, camera_view: str = "head"):
+def extract_batch_data(batch: dict, cameras: list[str]):
     """
     Extract relevant data from batch.
 
     Args:
         batch: Batch dictionary from dataloader
-        camera_view: Which camera view to use ("head", "left_wrist", "right_wrist")
+        cameras: List of camera names to extract
 
     Returns:
         Dictionary with extracted data
     """
-    # Get RGB image
-    rgb_key = f"observation.images.rgb.{camera_view}"
-    rgb = batch[rgb_key][0]  # Get first item in batch (batch_size=1)
+    # Get RGB images from all cameras
+    rgb_images = {}
+    for camera in cameras:
+        rgb_key = f"observation.images.rgb.{camera}"
+        rgb_images[camera] = batch[rgb_key][0]  # Get first item in batch (batch_size=1)
 
     # Get metadata
     task = batch["task"][0] if isinstance(batch["task"], list) else batch["task"]
@@ -72,7 +74,7 @@ def extract_batch_data(batch: dict, camera_view: str = "head"):
     action_is_pad = batch.get("action_is_pad", [None])[0]
 
     return {
-        "rgb": rgb,
+        "rgb_images": rgb_images,
         "task": task,
         "task_index": task_index,
         "episode_index": episode_index,
@@ -113,14 +115,14 @@ def main(cfg: DictConfig):
             for batch_idx, batch in enumerate(tqdm(val_dataloader, desc="Generating GT")):
                 try:
                     # Extract data from batch
-                    data = extract_batch_data(batch, camera_view=cfg.data.camera_view)
+                    data = extract_batch_data(batch, cameras=cfg.data.cameras)
 
-                    # Convert RGB to numpy for LLM interface
-                    rgb_np = data["rgb"].cpu().numpy()
+                    # Convert RGB images to numpy for LLM interface
+                    rgb_images_np = {cam: img.cpu().numpy() for cam, img in data["rgb_images"].items()}
 
                     # Generate subtask using LLM
                     subtask_gt = llm_interface.predict_subtask(
-                        rgb=rgb_np,
+                        rgb_images=rgb_images_np,
                         task=data["task"],
                         states=data["states"],
                         actions=data["actions"],
@@ -144,13 +146,14 @@ def main(cfg: DictConfig):
                     if cfg.eval.save_images:
                         image_dir = Path(cfg.eval.image_dir)
                         image_dir.mkdir(parents=True, exist_ok=True)
-                        image_path = (
-                            image_dir
-                            / f"ep{data['episode_index']}_frame{data['frame_index']}.png"
-                        )
-                        # Save image
-                        import torchvision
-                        torchvision.utils.save_image(data["rgb"], image_path)
+                        # Save all camera views
+                        for cam_name, rgb_img in data["rgb_images"].items():
+                            image_path = (
+                                image_dir
+                                / f"ep{data['episode_index']}_frame{data['frame_index']}_{cam_name}.png"
+                            )
+                            import torchvision
+                            torchvision.utils.save_image(rgb_img, image_path)
 
                 except Exception as e:
                     print(f"\n⚠️  Error processing batch {batch_idx}: {str(e)}")
