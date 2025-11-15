@@ -1,5 +1,11 @@
 defaults:
   - base_config
+  - override hydra/job_logging: default
+
+# Hydra configuration
+hydra:
+  job:
+    name: eval
 
 # Override data module to use BehaviorLeRobotDataset for evaluation
 data:
@@ -26,24 +32,29 @@ data:
     observation.state: [-0.0667, -0.0333, 0.0]  # Last 3 states at 30Hz
     action: [-0.0667, -0.0333, 0.0]  # Last 3 actions at 30Hz
 
-# LLM Interface Configuration
-llm_interface:
-  _target_: lara.llm_evaluator.llm_interface.LLMInterface
+# Evaluator Configuration
+evaluator:
+  _target_: lara.llm_evaluator.evaluator.Evaluator
   model: "claude-3-haiku-20240307"  # Cheapest Claude model
   temperature: 0.7
   max_tokens: 500
   api_key_env: "ANTHROPIC_API_KEY"
+  prompts: ${prompts}  # Pass prompts config to evaluator
+
+# Experiment Configuration
+experiment_name: "default_experiment"  # Name for this experiment run
 
 # Writer Configuration
 writer:
   _target_: lara.llm_evaluator.writer.Writer
-  output_dir: "${hydra:runtime.cwd}/eval_outputs"
+  output_dir: "${hydra:runtime.cwd}/eval_outputs/${experiment_name}"
   output_filename: "eval_gt.jsonl"
   metadata_filename: "metadata.json"
 
 # Evaluation specific parameters
 eval:
+  max_iterations: null  # Maximum number of batches to process (null = process all)
   use_stuck_detection: true  # Include stuck detection in prompts
   velocity_threshold: 0.01  # Threshold for detecting if robot is stuck
   save_images: false  # Whether to save images alongside JSONL
-  image_dir: "${hydra:runtime.cwd}/eval_outputs/images"
+  image_dir: "${hydra:runtime.cwd}/eval_outputs/${experiment_name}/images"

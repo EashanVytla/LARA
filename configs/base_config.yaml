@@ -1,15 +1,29 @@
+defaults:
+  - prompts  # Import prompt templates
+
 # ====== Data Module ======
 data:
   _target_: lara.datas.BehaviorDataModule
   data_path: ${data_dir}
-  task_name: 
+  task_name:
     - "picking_up_trash"
   batch_size: ${bs}
   val_batch_size: ${vbs}
   val_split_ratio: 0.1
   dataloader_num_workers: 4
-  max_num_demos: null 
+  max_num_demos: null
   seed: 0
   dataset_class: omnigibson.learning.datas.BehaviorIterableDataset
   downsample_factor: 3 # downsample to 10Hz
   use_task_info: false
+
+# ====== Planner Module ======
+planner:
+  _target_: lara.planner.planner.Planner
+  model_class: "transformers.Qwen2VLForConditionalGeneration"
+  processor_class: "transformers.AutoProcessor"
+  model_name: "Qwen/Qwen2-VL-2B-Instruct"
+  prompts: ${prompts}  # Pass prompts config to planner
+  device: "cuda"  # or "cpu"
+  torch_dtype: "auto"  # auto, bfloat16, float16, float32
+  trust_remote_code: true

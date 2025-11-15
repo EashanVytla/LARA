@@ -1,0 +1,54 @@
+# Prompt templates for LARA models
+# Use {variable_name} for placeholders that will be filled by .format() in Python
+
+planner:
+  subtask_prediction:
+    intro: "You are analyzing a robot performing the following task:"
+    task_line: "Task: {task}"
+    context: |
+      You are given:
+      1. The current RGB camera view from the robot's perspective
+      2. The robot's recent proprioceptive state history (joint positions, velocities, etc.)
+      3. The robot's recent action history
+    goal: "Your goal is to describe the IMMEDIATE subtask the robot should be performing at this moment."
+    stuck_warning: |
+      ⚠️ IMPORTANT: The robot appears to be stuck! The actions show non-zero commands but the state
+      indicates minimal movement. The subtask should address this obstruction.
+    guidelines: |
+      Guidelines:
+      - The robot may not see the target object in frame, so it may need to explore first
+      - Break down complex tasks into atomic subtasks (e.g., "Turn 360 degrees to find the trash can")
+      - If stuck (velocity near zero despite acting), suggest strategies to work around obstruction
+      - Be specific and actionable (e.g., "Rotate left 45 degrees" not "Look around")
+      - Focus on what the robot should do RIGHT NOW, not the entire task plan
+      - Keep response under 2 sentences
+    output_label: "Subtask description:"
+
+llm_evaluator:
+  prediction_evaluation:
+    intro: "You are evaluating a robot's predicted subtask for the following task:"
+    task_line: "Task: {task}"
+    prediction_line: "Predicted Subtask: {subtask}"
+    context: |
+      You are given:
+      1. The robot's camera views showing the current scene
+      2. The robot's recent proprioceptive state history
+      3. The robot's recent action history
+      4. A predicted subtask description
+    goal: |
+      Your goal is to evaluate how appropriate and accurate the predicted subtask is for this moment.
+      Consider:
+      - Is the subtask relevant to the overall task?
+      - Is it appropriate given the robot's current state and observations?
+      - Is it specific and actionable?
+      - Does it address any obstacles or stuck situations if present?
+    rating_instructions: |
+      Rate the predicted subtask with a score between 0.0 and 1.0:
+      0.0-0.3: Poor - Irrelevant, vague, or incorrect given the context
+      0.4-0.6: Fair - Somewhat relevant but lacks specificity or misses key details
+      0.7-0.8: Good - Relevant, specific, and mostly appropriate
+      0.9-1.0: Excellent - Highly relevant, specific, actionable, and perfectly suited to the situation
+    output_format: |
+      Provide your evaluation in exactly this format:
+      Score: [number between 0.0 and 1.0]
+      Explanation: [one sentence explanation]

@@ -47,7 +47,9 @@ class Writer:
         frame_id: Any,
         episode_id: Any,
         timestamp: float,
-        subtask_gt: str,
+        subtask_pred: str,
+        score: float,
+        explanation: str,
         extra_fields: Optional[Dict[str, Any]] = None,
     ):
         """
@@ -58,7 +60,9 @@ class Writer:
             frame_id: Frame identifier within episode
             episode_id: Episode identifier
             timestamp: Timestamp in seconds
-            subtask_gt: Ground truth subtask description
+            subtask_pred: Subtask prediction
+            score: Score (0.0-1.0)
+            explanation: Short explanation for score
             extra_fields: Optional additional fields to include
         """
         # Build entry
@@ -67,7 +71,9 @@ class Writer:
             "episode_id": str(episode_id),
             "frame_id": int(frame_id) if isinstance(frame_id, (int, float)) else str(frame_id),
             "timestamp": float(timestamp),
-            "subtask_gt": subtask_gt,
+            "subtask_pred": subtask_pred,
+            "score": float(score),
+            "explanation": explanation,
         }
 
         # Add extra fields if provided
