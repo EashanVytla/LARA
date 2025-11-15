@@ -132,7 +132,7 @@ def extract_batch_data(batch: dict, cameras: list[str]):
 @hydra.main(
     version_base=None,
     config_path=str(CONFIG_DIR),
-    config_name="eval_gt_config",
+    config_name="eval_planner_config",
 )
 def main(cfg: DictConfig):
     """

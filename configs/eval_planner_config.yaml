@@ -1,6 +1,5 @@
 defaults:
   - base_config
-  - override hydra/job_logging: default
 
 # Hydra configuration
 hydra:
