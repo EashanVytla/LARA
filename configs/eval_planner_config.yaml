@@ -31,6 +31,10 @@ data:
     observation.state: [-0.0667, -0.0333, 0.0]  # Last 3 states at 30Hz
     action: [-0.0667, -0.0333, 0.0]  # Last 3 actions at 30Hz
 
+# Planner - inherits from base_config but add prompts
+planner:
+  prompts: ${prompts}
+
 # Evaluator Configuration
 evaluator:
   _target_: lara.llm_evaluator.evaluator.Evaluator

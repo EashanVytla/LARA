@@ -34,13 +34,13 @@ def setup(cfg: DictConfig):
     data_module = instantiate(cfg.data)
     data_module.setup(stage="fit")  # Setup with validation split
 
-    # Instantiate planner with prompts
+    # Instantiate planner
     print("Initializing planner...")
-    planner = instantiate(cfg.planner, prompts=cfg.prompts)
+    planner = instantiate(cfg.planner)
 
-    # Instantiate evaluator with prompts
+    # Instantiate evaluator
     print("Initializing evaluator...")
-    evaluator = instantiate(cfg.evaluator, prompts=cfg.prompts)
+    evaluator = instantiate(cfg.evaluator)
 
     # Instantiate writer
     print("Initializing writer...")

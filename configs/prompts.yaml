@@ -1,8 +1,7 @@
 # Prompt templates for LARA models
 # Use {variable_name} for placeholders that will be filled by .format() in Python
 
-planner:
-  subtask_prediction:
+subtask_prediction:
     intro: "You are analyzing a robot performing the following task:"
     task_line: "Task: {task}"
     context: |
