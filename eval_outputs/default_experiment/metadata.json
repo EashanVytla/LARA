@@ -1,7 +1,14 @@
 {
-  "created_at": "2025-11-15T15:42:08.617966",
-  "total_entries": 0,
-  "tasks": {},
-  "episodes": {},
-  "completed_at": "2025-11-15T15:42:20.921900"
+  "created_at": "2025-11-15T15:53:18.221052",
+  "total_entries": 10,
+  "tasks": {
+    "1": 10
+  },
+  "episodes": {
+    "10050": {
+      "task_id": "1",
+      "frame_count": 10
+    }
+  },
+  "completed_at": "2025-11-15T15:55:12.268904"
 }
