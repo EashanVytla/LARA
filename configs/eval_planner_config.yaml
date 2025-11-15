@@ -33,7 +33,7 @@ data:
 
 # Planner - inherits from base_config but add prompts
 planner:
-  prompts: ${prompts}
+  prompts: ${subtask_prediction}
 
 # Evaluator Configuration
 evaluator:
@@ -42,7 +42,7 @@ evaluator:
   temperature: 0.7
   max_tokens: 500
   api_key_env: "ANTHROPIC_API_KEY"
-  prompts: ${prompts}  # Pass prompts config to evaluator
+  prompts: ${llm_evaluator}  # Pass prompts config to evaluator
 
 # Experiment Configuration
 experiment_name: "default_experiment"  # Name for this experiment run
