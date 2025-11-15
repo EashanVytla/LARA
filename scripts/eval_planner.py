@@ -68,6 +68,8 @@ def compute_metrics(scores: list[float]) -> dict:
             "min_score": 0.0,
             "max_score": 0.0,
             "median_score": 0.0,
+            "percentile_25": 0.0,
+            "percentile_75": 0.0,
         }
 
     scores_array = np.array(scores)

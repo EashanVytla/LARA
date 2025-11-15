@@ -236,8 +236,7 @@ class Planner():
         )
 
         # Move inputs to the same device as the model
-        inputs = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v
-                  for k, v in inputs.items()}
+        inputs = inputs.to(self.device)
 
         # Generate response
         with torch.no_grad():
