@@ -12,7 +12,8 @@ data:
   val_split_ratio: 0.1
   dataloader_num_workers: 4
   max_num_demos: null
-  seed: 0
+  seed: 42
+  shuffle: True
   dataset_class: omnigibson.learning.datas.BehaviorIterableDataset
   downsample_factor: 3 # downsample to 10Hz
   use_task_info: false

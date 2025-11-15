@@ -11,7 +11,7 @@ subtask_prediction:
     3. The robot's recent action history
   goal: "Your goal is to describe the IMMEDIATE subtask the robot should be performing at this moment."
   stuck_warning: |
-    ⚠️ IMPORTANT: The robot appears to be stuck! The actions show non-zero commands but the state
+    IMPORTANT: The robot appears to be stuck! The actions show non-zero commands but the state
     indicates minimal movement. The subtask should address this obstruction.
   guidelines: |
     Guidelines:
@@ -20,8 +20,15 @@ subtask_prediction:
     - If stuck (velocity near zero despite acting), suggest strategies to work around obstruction
     - Be specific and actionable (e.g., "Rotate left 45 degrees" not "Look around")
     - Focus on what the robot should do RIGHT NOW, not the entire task plan
-    - Keep response under 2 sentences
-  output_label: "Subtask description:"
+    - The subtask should be CONCISE yet DESCRIPTIVE - use specific actions like "Move forward", "Turn around", or "Pick up the red block in front of you"
+    - Do NOT include explanations or reasoning in the subtask itself
+  output_format: |
+    Provide your response in strict JSON format:
+    {
+      "subtask": "A concise, descriptive action the robot should perform right now",
+      "explanation": "Brief explanation of why this subtask is appropriate given the current context"
+    }
+  output_label: "Response:"
 
 llm_evaluator:
   intro: "You are evaluating a robot's predicted subtask for the following task:"
@@ -39,13 +46,15 @@ llm_evaluator:
     - Is the subtask relevant to the overall task?
     - Is it appropriate given the robot's current state and observations?
     - Is it specific and actionable?
+    - Is the subtask CONCISE yet DESCRIPTIVE? It should be brief but provide enough detail to be meaningful.
+    - Does the subtask avoid unnecessary explanations or reasoning?
     - Does it address any obstacles or stuck situations if present?
   rating_instructions: |
     Rate the predicted subtask with a score between 0.0 and 1.0:
-    0.0-0.3: Poor - Irrelevant, vague, or incorrect given the context
-    0.4-0.6: Fair - Somewhat relevant but lacks specificity or misses key details
-    0.7-0.8: Good - Relevant, specific, and mostly appropriate
-    0.9-1.0: Excellent - Highly relevant, specific, actionable, and perfectly suited to the situation
+    0.0-0.3: Poor - Irrelevant, vague, or incorrect given the context; too wordy with explanations or too brief to be useful
+    0.4-0.6: Fair - Somewhat relevant but lacks specificity, misses key details, or is not optimally concise
+    0.7-0.8: Good - Relevant, specific, mostly appropriate, and reasonably concise
+    0.9-1.0: Excellent - Highly relevant, specific, actionable, perfectly concise yet descriptive, and perfectly suited to the situation
   output_format: |
     Provide your evaluation in exactly this format:
     Score: [number between 0.0 and 1.0]

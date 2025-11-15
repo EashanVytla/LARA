@@ -147,6 +147,7 @@ class Planner():
         # Add guidelines and output label
         prompt += f"{p.guidelines}\n\n"
         prompt += f"{p.output_label}"
+        prompt += f"{p.output_format}"
 
         return prompt
 
