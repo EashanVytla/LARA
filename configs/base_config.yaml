@@ -23,7 +23,6 @@ planner:
   model_class: "transformers.Qwen2VLForConditionalGeneration"
   processor_class: "transformers.AutoProcessor"
   model_name: "Qwen/Qwen2-VL-2B-Instruct"
-  prompts: ${prompts}  # Pass prompts config to planner
   device: "cuda"  # or "cpu"
   torch_dtype: "auto"  # auto, bfloat16, float16, float32
   trust_remote_code: true
