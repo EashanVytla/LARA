@@ -53,7 +53,7 @@ writer:
 
 # Evaluation specific parameters
 eval:
-  max_iterations: null  # Maximum number of batches to process (null = process all)
+  max_iterations: 10  # Maximum number of batches to process (set to large number or null for all)
   use_stuck_detection: true  # Include stuck detection in prompts
   velocity_threshold: 0.01  # Threshold for detecting if robot is stuck
   save_images: false  # Whether to save images alongside JSONL

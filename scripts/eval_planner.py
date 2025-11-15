@@ -154,9 +154,9 @@ def main(cfg: DictConfig):
     # Get validation dataloader
     val_dataloader = data_module.val_dataloader()
     total_batches = len(val_dataloader)
-    max_iterations = cfg.eval.get("max_iterations", None)
+    max_iterations = cfg.eval.max_iterations
 
-    if max_iterations is not None:
+    if max_iterations is not None and max_iterations > 0:
         batches_to_process = min(max_iterations, total_batches)
         print(f"\nProcessing {batches_to_process} batches (max_iterations={max_iterations}) from validation set...")
     else:
