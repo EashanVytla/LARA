@@ -33,7 +33,7 @@ class Planner():
         self.model_name = model_name
         self.device = device
         self.trust_remote_code = trust_remote_code
-        self.prompts = prompts.planner.subtask_prediction  # Access planner prompts
+        self.prompts = prompts  # Access planner prompts
 
         # Parse torch dtype
         if torch_dtype == "auto":

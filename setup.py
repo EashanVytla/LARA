@@ -29,7 +29,9 @@ setup(
         "datasets",
         "lerobot",
         "huggingface-hub",
-        "pyarrow"
+        "pyarrow",
+        "transformers",
+        "accelerate"
     ],
     extras_require={
         "dev": [

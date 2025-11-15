@@ -26,3 +26,4 @@ planner:
   device: "cuda"  # or "cpu"
   torch_dtype: "auto"  # auto, bfloat16, float16, float32
   trust_remote_code: true
+  prompts: {$subtask_prediction}
