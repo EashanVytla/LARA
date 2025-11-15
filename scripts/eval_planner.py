@@ -10,6 +10,7 @@ from pathlib import Path
 import traceback
 import time
 import numpy as np
+import torch.multiprocessing as mp
 
 # Get the project root directory (parent of scripts/)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -279,4 +280,5 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
+    mp.set_start_method("spawn", force=True)
     main()

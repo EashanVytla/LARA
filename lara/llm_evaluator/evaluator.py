@@ -5,7 +5,9 @@ import torch
 from typing import Optional, Tuple
 from omegaconf import DictConfig
 from lara.utils import encode_image, format_state_action_history
+import logging
 
+logger = logging.getLogger(__name__)
 
 class Evaluator:
     """Evaluator for subtask predictions using Claude API."""
@@ -34,8 +36,9 @@ class Evaluator:
 
         # Store prompts if provided
         if prompts is not None:
-            self.prompts = prompts.llm_evaluator.prediction_evaluation
+            self.prompts = prompts
         else:
+            logger.warning("Prompts set to None")
             self.prompts = None
 
         # Load API key from environment
