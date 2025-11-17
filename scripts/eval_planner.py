@@ -1,5 +1,7 @@
 import os
 import json
+import sys
+import io
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import instantiate
@@ -12,9 +14,26 @@ import time
 import numpy as np
 import torch.multiprocessing as mp
 
+# Suppress tensor printing
+torch.set_printoptions(threshold=0, linewidth=80, precision=4, sci_mode=False)
+
 # Get the project root directory (parent of scripts/)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = PROJECT_ROOT / "configs"
+
+
+class SuppressStdout:
+    """Context manager to suppress stdout/stderr"""
+    def __enter__(self):
+        self._original_stdout = sys.stdout
+        self._original_stderr = sys.stderr
+        sys.stdout = io.StringIO()
+        sys.stderr = io.StringIO()
+        return self
+
+    def __exit__(self, *args):
+        sys.stdout = self._original_stdout
+        sys.stderr = self._original_stderr
 
 
 def setup(cfg: DictConfig):
@@ -96,13 +115,13 @@ def extract_batch_data(batch: dict, cameras: list[str]):
     Returns:
         Dictionary with extracted data
     """
-    print(f"Batch keys: {batch.keys()}")
     # print(f"Batch Obs keys: {batch['masks'].keys()}")
     # Get RGB images from all cameras
     rgb_images = {}
     for camera in cameras:
         if 'obs' in batch.keys(): # Iterable
-            rgb_images[camera] = batch['obs'][camera + '::rgb']
+            rgb_tensor = batch['obs'][camera + '::rgb']
+            rgb_images[camera] = rgb_tensor
 
             # Get state and action history
             states = {**batch["obs"]['qpos'], **batch['obs']['eef'], **batch['obs']['odom']}
@@ -193,7 +212,7 @@ def main(cfg: DictConfig):
     # Process each batch
     try:
         with writer:  # Use context manager for automatic finalization
-            for batch_idx, batch in enumerate(tqdm(val_dataloader, desc="Predicting & Evaluating", total=batches_to_process if batches_to_process else None)):
+            for batch_idx, batch in enumerate(tqdm(val_dataloader, desc="Predicting & Evaluating", total=batches_to_process if batches_to_process else None, disable=False)):
                 # Check if we've reached max_iterations
                 if max_iterations is not None and batch_idx >= max_iterations:
                     print(f"\nReached max_iterations ({max_iterations}). Stopping evaluation.")
@@ -206,16 +225,17 @@ def main(cfg: DictConfig):
 
                     # Step 1: Predict subtask using Planner (Qwen2VL)
                     print(f"\n[Batch {batch_idx}] Predicting subtask with Planner...")
-                    predicted_subtask_raw = planner.predict_subtask(
-                        rgb_images=data["rgb_images"],  # Planner expects tensors
-                        task=data["task"],
-                        states=data["states"],
-                        actions=data["actions"],
-                        use_stuck_detection=cfg.eval.use_stuck_detection,
-                        velocity_threshold=cfg.eval.velocity_threshold,
-                        # state_is_pad=data["state_is_pad"],
-                        # action_is_pad=data["action_is_pad"],
-                    )
+                    with SuppressStdout():
+                        predicted_subtask_raw = planner.predict_subtask(
+                            rgb_images=data["rgb_images"],  # Planner expects tensors
+                            task=data["task"],
+                            states=data["states"],
+                            actions=data["actions"],
+                            use_stuck_detection=cfg.eval.use_stuck_detection,
+                            velocity_threshold=cfg.eval.velocity_threshold,
+                            # state_is_pad=data["state_is_pad"],
+                            # action_is_pad=data["action_is_pad"],
+                        )
 
                     for i, subtask in enumerate(predicted_subtask_raw):
                         print(f"Predicted subtask (raw) - {i}: {subtask.strip()}")

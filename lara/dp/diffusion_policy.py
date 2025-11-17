@@ -9,6 +9,7 @@ from lara.utils.functional_utils import call_once
 from omnigibson.learning.utils.obs_utils import MAX_DEPTH, MIN_DEPTH
 from omegaconf import DictConfig
 from typing import Any, Dict, Optional, List
+from lara.planner.planner import Planner
 
 
 class DiffusionPolicy(BasePolicy):
@@ -24,6 +25,8 @@ class DiffusionPolicy(BasePolicy):
         *args,
         prop_dim: int,
         prop_keys: List[str],
+        # ====== Planner ======
+        planner: Planner,
         # ====== Feature Extractors ======
         feature_extractors: Dict[str, DictConfig],
         feature_fusion_hidden_depth: int = 1,
@@ -57,6 +60,7 @@ class DiffusionPolicy(BasePolicy):
     ):
         super().__init__(*args, **kwargs)
 
+        self.planner = planner
         self._prop_keys = prop_keys
         self._features = set(feature_extractors.keys())
         self.feature_extractor = SimpleFeatureFusion(
@@ -303,6 +307,51 @@ class DiffusionPolicy(BasePolicy):
             )
 
         return optimizer
+    
+    @staticmethod
+    def create_subtask_mask(subtask_lists: list[list[str]]) -> torch.Tensor:
+        """
+        Create a mask indicating subtask changes in trajectories.
+
+        A value of 1 indicates the subtask is the same as the previous timestep (or first timestep),
+        and 0 indicates a subtask change from the previous timestep.
+
+        Args:
+            subtask_lists: List of subtask lists, one per trajectory in batch.
+                          Each inner list contains subtask strings for each timestep.
+                          Shape: (batch_size,), where each element is a list of variable length.
+
+        Returns:
+            Subtask change mask tensor of shape (batch_size, seq_len).
+            Values are 1 where subtask is same as previous, 0 where it changes.
+
+        Example:
+            traj1: [s1_t1, s1_t2, s1_t3, s2_t4]  -> mask: [1, 1, 1, 0]
+            traj2: [s5_t1, s5_t2, s6_t3, s6_t4]  -> mask: [1, 1, 0, 0]
+            traj3: [s1_t1, s1_t2, s1_t3, s1_t4]  -> mask: [1, 1, 1, 1]
+            traj4: [s3_t1, s3_t2, s3_t3, s3_t4]  -> mask: [1, 1, 1, 1]
+        """
+        batch_size = len(subtask_lists)
+        max_seq_len = max(len(traj) for traj in subtask_lists) if subtask_lists else 0
+
+        # Initialize mask with zeros
+        mask = torch.zeros((batch_size, max_seq_len), dtype=torch.float32)
+
+        for b_idx, subtask_traj in enumerate(subtask_lists):
+            # First timestep always has mask value 1
+            if len(subtask_traj) > 0:
+                mask[b_idx, 0] = 1
+
+                # Check for subtask changes
+                for t in range(1, len(subtask_traj)):
+                    if subtask_traj[t] == subtask_traj[t - 1]:
+                        # Subtask is the same as previous
+                        mask[b_idx, t] = 1
+                    else:
+                        # Subtask changed from previous
+                        mask[b_idx, t] = 0
+
+        return mask
 
     def process_data(self, data_batch: dict, extract_action: bool = False) -> Any:
         # process observation data
@@ -322,6 +371,62 @@ class DiffusionPolicy(BasePolicy):
             }
         if "task" in self._features:
             data["task"] = data_batch["obs"]["task"]
+        if "subtask" in self._features:
+            # Plan subtask predictions for full batch using the planner
+            # Extract required inputs for planner
+            rgb_images = data.get("rgb", {})
+            task = data_batch["obs"].get("task", "")
+
+            # Get batch size
+            batch_size = next(iter(rgb_images.values())).shape[0] if rgb_images else data_batch["obs"]["qpos"].shape[0]
+
+            # Plan subtasks for each sample in the batch
+            subtask_lists = []
+            for b_idx in range(batch_size):
+                # Extract batch sample
+                rgb_images_sample = {k: v[b_idx] for k, v in rgb_images.items()}
+                states = data_batch["obs"]["qpos"][b_idx] if "qpos" in data_batch["obs"] else None
+                actions = data_batch["actions"][b_idx] if "actions" in data_batch else None
+
+                # Get subtask prediction from planner
+                subtask_pred = self.planner.predict_subtask(
+                    rgb_images=rgb_images_sample,
+                    task=task,
+                    states=states,
+                    actions=actions,
+                )
+                # subtask_pred is a list of strings (one per timestep)
+                subtask_lists.append(subtask_pred)
+
+            # Create subtask change mask
+            subtask_change_mask = self.create_subtask_mask(subtask_lists)
+
+            # Combine with existing action mask
+            if "masks" in data_batch:
+                action_mask = data_batch["masks"]
+                # Combine masks: element-wise multiplication so that a timestep is valid only if
+                # both the action is valid AND the subtask hasn't changed
+                combined_mask = action_mask * subtask_change_mask
+                data["masks"] = combined_mask
+            else:
+                data["masks"] = subtask_change_mask
+
+            # Convert subtask lists to embedding-compatible format
+            # Flatten all subtasks for batch embedding
+            all_subtasks = []
+            subtask_indices = []  # Track which subtask belongs to which (batch, timestep)
+
+            for b_idx, subtask_traj in enumerate(subtask_lists):
+                for t_idx, subtask in enumerate(subtask_traj):
+                    all_subtasks.append(subtask)
+                    subtask_indices.append((b_idx, t_idx))
+
+            # Store subtask information for feature extraction
+            data["subtask"] = {
+                "texts": all_subtasks,
+                "indices": subtask_indices,
+                "subtask_change_mask": subtask_change_mask,
+            }
         if extract_action:
             # extract action from data_batch
             data.update({

@@ -43,6 +43,8 @@ def encode_image(rgb: np.ndarray) -> str:
 def format_state_action_history(
     states,
     actions,
+    batch=0,
+    step=0,
     state_is_pad: Optional[torch.Tensor] = None,
     action_is_pad: Optional[torch.Tensor] = None,
 ) -> str:

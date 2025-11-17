@@ -45,7 +45,7 @@ data:
   seed: 42
   dataset_class: omnigibson.learning.datas.BehaviorIterableDataset
   # ====== Dataset ======
-  obs_window_size: 3
+  obs_window_size: 16
   ctx_len: 16
   downsample_factor: 3 # downsample to 10Hz
   use_task_info: false

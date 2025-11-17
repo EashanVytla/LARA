@@ -19,6 +19,7 @@ class Planner():
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         torch_dtype: str = "auto",
         trust_remote_code: bool = True,
+        obs_window_len: int = 16
     ):
         """
         Initialize the planner with a vision-language model and processor.
@@ -36,6 +37,7 @@ class Planner():
         self.device = device
         self.trust_remote_code = trust_remote_code
         self.prompts = prompts  # Access planner prompts
+        self.obs_window_len = obs_window_len
 
         # Parse torch dtype
         if torch_dtype == "auto":
@@ -112,6 +114,8 @@ class Planner():
         actions: torch.Tensor,
         use_stuck_detection: bool = True,
         velocity_threshold: float = 0.01,
+        batch = 0,
+        step = 0,
         state_is_pad: Optional[torch.Tensor] = None,
         action_is_pad: Optional[torch.Tensor] = None,
     ) -> str:
@@ -132,7 +136,7 @@ class Planner():
         """
         p = self.prompts  # Shorthand for prompt templates
 
-        logger.info(f"Task: {task}")
+        # logger.info(f"Task: {task}")
 
         # Build prompt from configurable components
         prompt = f"{p.intro}\n"
@@ -141,7 +145,7 @@ class Planner():
         prompt += f"{p.goal}\n\n"
 
         # Add state-action history (complex formatting stays in Python)
-        prompt += format_state_action_history(states, actions, state_is_pad, action_is_pad)
+        prompt += format_state_action_history(states, actions, batch, step, state_is_pad, action_is_pad)
         prompt += "\n\n"
 
         # Add stuck warning if detected
@@ -188,41 +192,46 @@ class Planner():
         text_inputs = []
         image_lists = []
 
-        logger.info(f"Batch size: {batch_size}")
+        # logger.info(f"Batch size: {batch_size}")
 
         for i in range(batch_size):
-            # Build text prompt
-            text_prompt = self._build_prompt(
-                task=task,
-                states=states,
-                actions=actions,
-                use_stuck_detection=use_stuck_detection,
-                velocity_threshold=velocity_threshold,
-                state_is_pad=state_is_pad,
-                action_is_pad=action_is_pad,
-            )
+            traj_image_list = []
+            for j in range(self.obs_window_len):
+                # Build text prompt
+                text_prompt = self._build_prompt(
+                    task=task,
+                    states=states,
+                    actions=actions,
+                    use_stuck_detection=use_stuck_detection,
+                    velocity_threshold=velocity_threshold,
+                    state_is_pad=state_is_pad,
+                    action_is_pad=action_is_pad,
+                    batch=i,
+                    step=j
+                )
 
-            logger.info("Prompt building is complete")
+                logger.info("Prompt building is complete")
 
-            # Prepare images for Qwen2VL
-            # Qwen2VL processor can accept tensors directly without PIL conversion
-            images_list = []
-            for cam_name, img_tensor in rgb_images.items():
-                logger.info("Processing image tensor")
-                # Remove batch and sequence dimensions if present
-                # Expected shape: (B, T, C, H, W) or (B, C, H, W) or (T, C, H, W) or (C, H, W)
-                latest_img_tensor = img_tensor[i, -1]
+                # Prepare images for Qwen2VL
+                # Qwen2VL processor can accept tensors directly without PIL conversion
+                images_list = []
+                for cam_name, img_tensor in rgb_images.items():
+                    logger.info("Processing image tensor")
+                    # Remove batch and sequence dimensions if present
+                    # Expected shape: (B, T, C, H, W) or (B, C, H, W) or (T, C, H, W) or (C, H, W)
+                    latest_img_tensor = img_tensor[i, -1]
 
-                logger.info(f"Image tensor shape: {latest_img_tensor.shape}")
+                    # logger.info(f"Image tensor shape: {latest_img_tensor.shape}")
 
-                # Normalize to [0, 1] range if needed (processor handles normalization)
-                if latest_img_tensor.dtype == torch.float32 or latest_img_tensor.dtype == torch.float16:
-                    logger.info("Normalizing image to [0, 1] range")
-                    if latest_img_tensor.max() > 1.0:
-                        latest_img_tensor = latest_img_tensor / 255.0
+                    # Normalize to [0, 1] range if needed (processor handles normalization)
+                    if latest_img_tensor.dtype == torch.float32 or latest_img_tensor.dtype == torch.float16:
+                        logger.info("Normalizing image to [0, 1] range")
+                        if latest_img_tensor.max() > 1.0:
+                            latest_img_tensor = latest_img_tensor / 255.0
 
-                logger.info("Image tensor processing complete")
-                images_list.append(latest_img_tensor)
+                    logger.info("Image tensor processing complete")
+                    images_list.append(latest_img_tensor)
+                traj_image_list.append(images_list)
 
             # Create Qwen2VL message format with images
             # Qwen2VL uses a chat format with image tokens
@@ -230,8 +239,8 @@ class Planner():
                 {
                     "role": "user",
                     "content": [
-                        *[{"type": "image", "image": img} for img in images_list],
                         {"type": "text", "text": text_prompt},
+                        {"type": "text", "text": f"Camera Views: {rgb_images.keys()}"}
                     ],
                 }
             ]
@@ -242,9 +251,8 @@ class Planner():
             )
 
             text_inputs.append(text_input)
-            image_lists.append(images_list)
+            image_lists.append(traj_image_list)
 
-        logger.info(f"Image Lists List Size: {len(image_lists)}")
 
         # Prepare inputs for the model
         inputs = self.processor(
@@ -254,7 +262,7 @@ class Planner():
             padding=True,
         )
 
-        logger.info(type(inputs))
+        # logger.info(type(inputs))
 
         # Move inputs to the same device as the model
         inputs = inputs.to(self.device)
@@ -267,7 +275,7 @@ class Planner():
                 do_sample=False,  # Use greedy decoding for consistency
             )
 
-        logger.info(generated_ids.shape)
+        # logger.info(generated_ids.shape)
 
         # Decode the generated tokens
         generated_ids_trimmed = [
