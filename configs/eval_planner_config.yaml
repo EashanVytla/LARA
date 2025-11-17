@@ -1,5 +1,6 @@
 defaults:
   - base_config
+  - robot/r1pro
 
 # Hydra configuration
 hydra:
@@ -7,29 +8,51 @@ hydra:
     name: eval
 
 # Override data module to use BehaviorLeRobotDataset for evaluation
+# data:
+#   _target_: lara.data.BehaviorDataModule
+#   data_path: ${oc.env:DATA_DIR}  # Read from .env file
+#   batch_size: 1  # Process one frame at a time for eval GT generation
+#   val_batch_size: 1
+#   split_dataset: false  # No train/val split - use all data for validation only
+#   val_split_ratio: 0.9  # Ignored when split_dataset is false
+#   dataloader_num_workers: 1
+#   max_num_demos: null
+#   dataset_class: omnigibson.learning.datas.BehaviorLeRobotDataset
+#   # Dataset-specific parameters (passed via **kwargs to dataset)
+#   repo_id: "behavior-1k/2025-challenge-demos"
+#   tasks: ["picking_up_trash"]  # List of task names to load, or null for all tasks
+#   episodes: 5  # null = all episodes, or use range(N) for first N episodes, or [0, 2, 5] for specific episodes
+#   modalities: ["rgb", "depth", "seg_instance_id"]  # Modalities to load
+#   cameras: ["head", "left_wrist", "right_wrist"]  # Cameras to load
+#   local_only: false  # Set to true to avoid downloading from HuggingFace
+#   force_cache_sync: false  # Force sync cache with HuggingFace (set false after first download)
+#   chunk_streaming_using_keyframe: true  # Efficient data access
+#   # Temporal queries for proprioceptive history
+#   delta_timestamps:
+#     observation.state: [-0.0667, -0.0333, 0.0]  # Last 3 states at 30Hz
+#     action: [-0.0667, -0.0333, 0.0]  # Last 3 actions at 30Hz
+
 data:
   _target_: lara.data.BehaviorDataModule
-  data_path: ${oc.env:DATA_DIR}  # Read from .env file
-  batch_size: 1  # Process one frame at a time for eval GT generation
-  val_batch_size: 1
-  split_dataset: false  # No train/val split - use all data for validation only
-  val_split_ratio: 0.9  # Ignored when split_dataset is false
-  dataloader_num_workers: 1
-  max_num_demos: null
-  dataset_class: omnigibson.learning.datas.BehaviorLeRobotDataset
-  # Dataset-specific parameters (passed via **kwargs to dataset)
-  repo_id: "behavior-1k/2025-challenge-demos"
-  tasks: ["picking_up_trash"]  # List of task names to load, or null for all tasks
-  episodes: 5  # null = all episodes, or use range(N) for first N episodes, or [0, 2, 5] for specific episodes
-  modalities: ["rgb", "depth", "seg_instance_id"]  # Modalities to load
-  cameras: ["head", "left_wrist", "right_wrist"]  # Cameras to load
-  local_only: false  # Set to true to avoid downloading from HuggingFace
-  force_cache_sync: false  # Force sync cache with HuggingFace (set false after first download)
-  chunk_streaming_using_keyframe: true  # Efficient data access
-  # Temporal queries for proprioceptive history
-  delta_timestamps:
-    observation.state: [-0.0667, -0.0333, 0.0]  # Last 3 states at 30Hz
-    action: [-0.0667, -0.0333, 0.0]  # Last 3 actions at 30Hz
+  data_path: ${oc.env:DATA_DIR} 
+  task_name: 
+    - "picking_up_trash"
+  batch_size: 2
+  val_batch_size: 2
+  val_split_ratio: 0.1
+  dataloader_num_workers: 4
+  max_num_demos: null 
+  seed: 42
+  dataset_class: omnigibson.learning.datas.BehaviorIterableDataset
+  # ====== Dataset ======
+  obs_window_size: 3
+  ctx_len: 16
+  downsample_factor: 3 # downsample to 10Hz
+  use_task_info: false
+  task_info_range: null
+  multi_view_cameras: ${robot.multi_view_cameras}
+  visual_obs_types: [rgb]
+  use_action_chunks: false
 
 # Evaluator Configuration
 evaluator:

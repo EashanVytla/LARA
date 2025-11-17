@@ -7,6 +7,8 @@ from lara.utils import format_state_action_history
 
 logger = logging.getLogger(__name__)
 
+logging.basicConfig(level=logging.DEBUG)
+
 class Planner():
     def __init__(
         self,
@@ -106,7 +108,7 @@ class Planner():
     def _build_prompt(
         self,
         task: str,
-        states: torch.Tensor,
+        states,
         actions: torch.Tensor,
         use_stuck_detection: bool = True,
         velocity_threshold: float = 0.01,
@@ -130,6 +132,8 @@ class Planner():
         """
         p = self.prompts  # Shorthand for prompt templates
 
+        logger.info(f"Task: {task}")
+
         # Build prompt from configurable components
         prompt = f"{p.intro}\n"
         prompt += f"{p.task_line.format(task=task)}\n\n"
@@ -141,8 +145,8 @@ class Planner():
         prompt += "\n\n"
 
         # Add stuck warning if detected
-        if use_stuck_detection and self._detect_stuck(states, actions, velocity_threshold):
-            prompt += f"{p.stuck_warning}\n\n"
+        # if use_stuck_detection and self._detect_stuck(states, actions, velocity_threshold):
+        # prompt += f"{p.stuck_warning}\n\n"
 
         # Add guidelines and output label
         prompt += f"{p.guidelines}\n\n"
@@ -166,7 +170,7 @@ class Planner():
         Generate subtask prediction using the vision-language model.
 
         Args:
-            rgb_images: Dictionary of RGB images {camera_name: tensor}, each shape (3, H, W) or (H, W, 3)
+            rgb_images: Dictionary of RGB images {camera_name: tensor}, each shape (B, T, C, H, W) or (H, W, 3)
             task: High-level task description
             states: State history tensor, shape (T, state_dim)
             actions: Action history tensor, shape (T, action_dim)
@@ -178,63 +182,79 @@ class Planner():
         Returns:
             Natural language subtask description
         """
-        # Build text prompt
-        text_prompt = self._build_prompt(
-            task=task,
-            states=states,
-            actions=actions,
-            use_stuck_detection=use_stuck_detection,
-            velocity_threshold=velocity_threshold,
-            state_is_pad=state_is_pad,
-            action_is_pad=action_is_pad,
-        )
+        logger.info("Building prompt")
 
-        # Prepare images for Qwen2VL
-        # Qwen2VL expects images in specific format for the processor
-        images_list = []
-        for cam_name, img_tensor in rgb_images.items():
-            # Ensure image is in (H, W, C) format with values in [0, 255]
-            if img_tensor.shape[0] == 3:  # (3, H, W) -> (H, W, 3)
-                img_tensor = img_tensor.permute(1, 2, 0)
+        batch_size = next(iter(rgb_images.values())).shape[0]
+        text_inputs = []
+        image_lists = []
 
-            # Convert to uint8 if needed
-            if img_tensor.dtype == torch.float32 or img_tensor.dtype == torch.float16:
-                if img_tensor.max() <= 1.0:
-                    img_tensor = (img_tensor * 255).to(torch.uint8)
-                else:
-                    img_tensor = img_tensor.to(torch.uint8)
+        logger.info(f"Batch size: {batch_size}")
 
-            # Convert to PIL Image for processor
-            from PIL import Image
-            import numpy as np
-            img_np = img_tensor.cpu().numpy()
-            pil_image = Image.fromarray(img_np)
-            images_list.append(pil_image)
+        for i in range(batch_size):
+            # Build text prompt
+            text_prompt = self._build_prompt(
+                task=task,
+                states=states,
+                actions=actions,
+                use_stuck_detection=use_stuck_detection,
+                velocity_threshold=velocity_threshold,
+                state_is_pad=state_is_pad,
+                action_is_pad=action_is_pad,
+            )
 
-        # Create Qwen2VL message format with images
-        # Qwen2VL uses a chat format with image tokens
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    *[{"type": "image", "image": img} for img in images_list],
-                    {"type": "text", "text": text_prompt},
-                ],
-            }
-        ]
+            logger.info("Prompt building is complete")
 
-        # Process inputs through the processor
-        text_input = self.processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
+            # Prepare images for Qwen2VL
+            # Qwen2VL processor can accept tensors directly without PIL conversion
+            images_list = []
+            for cam_name, img_tensor in rgb_images.items():
+                logger.info("Processing image tensor")
+                # Remove batch and sequence dimensions if present
+                # Expected shape: (B, T, C, H, W) or (B, C, H, W) or (T, C, H, W) or (C, H, W)
+                latest_img_tensor = img_tensor[i, -1]
+
+                logger.info(f"Image tensor shape: {latest_img_tensor.shape}")
+
+                # Normalize to [0, 1] range if needed (processor handles normalization)
+                if latest_img_tensor.dtype == torch.float32 or latest_img_tensor.dtype == torch.float16:
+                    logger.info("Normalizing image to [0, 1] range")
+                    if latest_img_tensor.max() > 1.0:
+                        latest_img_tensor = latest_img_tensor / 255.0
+
+                logger.info("Image tensor processing complete")
+                images_list.append(latest_img_tensor)
+
+            # Create Qwen2VL message format with images
+            # Qwen2VL uses a chat format with image tokens
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        *[{"type": "image", "image": img} for img in images_list],
+                        {"type": "text", "text": text_prompt},
+                    ],
+                }
+            ]
+
+            # Process inputs through the processor
+            text_input = self.processor.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+
+            text_inputs.append(text_input)
+            image_lists.append(images_list)
+
+        logger.info(f"Image Lists List Size: {len(image_lists)}")
 
         # Prepare inputs for the model
         inputs = self.processor(
-            text=[text_input],
-            images=images_list,
+            text=text_inputs,
+            images=image_lists,
             return_tensors="pt",
             padding=True,
         )
+
+        logger.info(type(inputs))
 
         # Move inputs to the same device as the model
         inputs = inputs.to(self.device)
@@ -247,6 +267,8 @@ class Planner():
                 do_sample=False,  # Use greedy decoding for consistency
             )
 
+        logger.info(generated_ids.shape)
+
         # Decode the generated tokens
         generated_ids_trimmed = [
             out_ids[len(in_ids):]
@@ -257,6 +279,8 @@ class Planner():
             generated_ids_trimmed,
             skip_special_tokens=True,
             clean_up_tokenization_spaces=False
-        )[0]
+        )
 
-        return subtask_text.strip()
+        logger.info(len(subtask_text))
+
+        return subtask_text

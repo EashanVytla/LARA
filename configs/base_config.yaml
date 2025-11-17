@@ -3,20 +3,27 @@ defaults:
 
 # ====== Data Module ======
 data:
-  _target_: lara.datas.BehaviorDataModule
-  data_path: ${data_dir}
-  task_name:
+  _target_: il_lib.datas.BehaviorDataModule
+  data_path: ${oc.env:DATA_DIR} 
+  task_name: 
     - "picking_up_trash"
-  batch_size: ${bs}
-  val_batch_size: ${vbs}
+  batch_size: 2
+  val_batch_size: 2
   val_split_ratio: 0.1
   dataloader_num_workers: 4
-  max_num_demos: null
+  max_num_demos: null 
   seed: 42
-  shuffle: True
   dataset_class: omnigibson.learning.datas.BehaviorIterableDataset
+  # ====== Dataset ======
+  obs_window_size: 3
+  ctx_len: 16
   downsample_factor: 3 # downsample to 10Hz
   use_task_info: false
+  task_info_range: null
+  multi_view_cameras: ${robot.multi_view_cameras}
+  visual_obs_types: [rgb]
+  use_action_chunks: false
+  
 
 # ====== Planner Module ======
 planner:

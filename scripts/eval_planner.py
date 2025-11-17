@@ -96,39 +96,44 @@ def extract_batch_data(batch: dict, cameras: list[str]):
     Returns:
         Dictionary with extracted data
     """
+    print(f"Batch keys: {batch.keys()}")
+    # print(f"Batch Obs keys: {batch['masks'].keys()}")
     # Get RGB images from all cameras
     rgb_images = {}
     for camera in cameras:
-        rgb_key = f"observation.images.rgb.{camera}"
-        rgb_images[camera] = batch[rgb_key][0]  # Get first item in batch (batch_size=1)
+        if 'obs' in batch.keys(): # Iterable
+            rgb_images[camera] = batch['obs'][camera + '::rgb']
+
+            # Get state and action history
+            states = {**batch["obs"]['qpos'], **batch['obs']['eef'], **batch['obs']['odom']}
+            actions = batch["actions"]  # Shape: (T, action_dim)
+        else: # Lerobot
+            rgb_key = f"observation.images.rgb.{camera}"
+            rgb_images[camera] = batch[rgb_key][0]  # Get first item in batch (batch_size=1)
+
+            # Get state and action history
+            states = batch["observation.state"][0]  # Shape: (T, state_dim)
+            actions = batch["action"][0]  # Shape: (T, action_dim)
+
+            # Get padding masks if they exist
+            state_is_pad = batch.get("observation.state_is_pad", [None])[0]
+            action_is_pad = batch.get("action_is_pad", [None])[0]
+
 
     # Get metadata
-    task = batch["task"][0] if isinstance(batch["task"], list) else batch["task"]
+    task = batch["task_prompt"]
     task_index = batch["task_index"][0].item()
     episode_index = batch["episode_index"][0].item()
-    # BehaviorLeRobotDataset uses 'index' instead of 'frame_index'
-    frame_index = batch["index"][0].item()
-    timestamp = batch["timestamp"][0].item()
-
-    # Get state and action history
-    states = batch["observation.state"][0]  # Shape: (T, state_dim)
-    actions = batch["action"][0]  # Shape: (T, action_dim)
-
-    # Get padding masks if they exist
-    state_is_pad = batch.get("observation.state_is_pad", [None])[0]
-    action_is_pad = batch.get("action_is_pad", [None])[0]
 
     return {
         "rgb_images": rgb_images,
         "task": task,
         "task_index": task_index,
         "episode_index": episode_index,
-        "frame_index": frame_index,
-        "timestamp": timestamp,
         "states": states,
         "actions": actions,
-        "state_is_pad": state_is_pad,
-        "action_is_pad": action_is_pad,
+        # "state_is_pad": state_is_pad,
+        # "action_is_pad": action_is_pad,
     }
 
 
@@ -156,15 +161,31 @@ def main(cfg: DictConfig):
 
     # Get validation dataloader
     val_dataloader = data_module.val_dataloader()
-    total_batches = len(val_dataloader)
+
+    # Handle both regular and iterable datasets
+    # IterableDataset doesn't support len(), so we need to check
+    try:
+        total_batches = len(val_dataloader)
+        batches_to_process = None  # We'll track batches dynamically if needed
+    except TypeError:
+        # IterableDataset doesn't have __len__
+        total_batches = None
+        batches_to_process = None
+
     max_iterations = cfg.eval.max_iterations
 
     if max_iterations is not None and max_iterations > 0:
-        batches_to_process = min(max_iterations, total_batches)
-        print(f"\nProcessing {batches_to_process} batches (max_iterations={max_iterations}) from validation set...")
+        if total_batches is not None:
+            batches_to_process = min(max_iterations, total_batches)
+            print(f"\nProcessing {batches_to_process} batches (max_iterations={max_iterations}) from validation set...")
+        else:
+            print(f"\nProcessing up to {max_iterations} batches from validation set (IterableDataset)...")
     else:
-        batches_to_process = total_batches
-        print(f"\nProcessing all {total_batches} batches from validation set...")
+        if total_batches is not None:
+            batches_to_process = total_batches
+            print(f"\nProcessing all {total_batches} batches from validation set...")
+        else:
+            print(f"\nProcessing all batches from validation set (IterableDataset - size unknown)...")
 
     # Track scores for metrics computation
     all_scores = []
@@ -172,28 +193,46 @@ def main(cfg: DictConfig):
     # Process each batch
     try:
         with writer:  # Use context manager for automatic finalization
-            for batch_idx, batch in enumerate(tqdm(val_dataloader, desc="Predicting & Evaluating", total=batches_to_process)):
+            for batch_idx, batch in enumerate(tqdm(val_dataloader, desc="Predicting & Evaluating", total=batches_to_process if batches_to_process else None)):
                 # Check if we've reached max_iterations
                 if max_iterations is not None and batch_idx >= max_iterations:
                     print(f"\nReached max_iterations ({max_iterations}). Stopping evaluation.")
                     break
                 try:
                     # Extract data from batch
-                    data = extract_batch_data(batch, cameras=cfg.data.cameras)
+                    cameras = list(cfg.robot.multi_view_cameras.keys())
+                    cameras = [cfg.robot.multi_view_cameras[key]['name'] for key in cfg.robot.multi_view_cameras.keys()]
+                    data = extract_batch_data(batch, cameras=cameras)
 
                     # Step 1: Predict subtask using Planner (Qwen2VL)
                     print(f"\n[Batch {batch_idx}] Predicting subtask with Planner...")
-                    predicted_subtask = planner.predict_subtask(
+                    predicted_subtask_raw = planner.predict_subtask(
                         rgb_images=data["rgb_images"],  # Planner expects tensors
                         task=data["task"],
                         states=data["states"],
                         actions=data["actions"],
                         use_stuck_detection=cfg.eval.use_stuck_detection,
                         velocity_threshold=cfg.eval.velocity_threshold,
-                        state_is_pad=data["state_is_pad"],
-                        action_is_pad=data["action_is_pad"],
+                        # state_is_pad=data["state_is_pad"],
+                        # action_is_pad=data["action_is_pad"],
                     )
-                    print(f"Predicted subtask: {predicted_subtask}")
+
+                    for i, subtask in enumerate(predicted_subtask_raw):
+                        print(f"Predicted subtask (raw) - {i}: {subtask.strip()}")
+
+                    # Parse the JSON response to extract subtask and explanation
+                    try:
+                        predicted_data = json.loads(predicted_subtask_raw)
+                        predicted_subtask = predicted_data.get("subtask", predicted_subtask_raw)
+                        predicted_explanation = predicted_data.get("explanation", "")
+                    except json.JSONDecodeError:
+                        # If parsing fails, use the raw response as the subtask
+                        print(f"Warning: Could not parse JSON from planner response. Using raw output.")
+                        predicted_subtask = predicted_subtask_raw
+                        predicted_explanation = ""
+
+                    print(f"Parsed subtask: {predicted_subtask}")
+                    print(f"Parsed explanation: {predicted_explanation}")
 
                     # Step 2: Evaluate the prediction using Evaluator (Claude)
                     print(f"[Batch {batch_idx}] Evaluating prediction with Claude...")
@@ -205,8 +244,8 @@ def main(cfg: DictConfig):
                         actions=data["actions"],
                         use_stuck_detection=cfg.eval.use_stuck_detection,
                         velocity_threshold=cfg.eval.velocity_threshold,
-                        state_is_pad=data["state_is_pad"],
-                        action_is_pad=data["action_is_pad"],
+                        # state_is_pad=data["state_is_pad"],
+                        # action_is_pad=data["action_is_pad"],
                     )
                     print(f"Evaluation - Score: {score}, Explanation: {explanation}")
 
@@ -219,14 +258,15 @@ def main(cfg: DictConfig):
                     # Write prediction and evaluation to file
                     writer.write(
                         task_id=data["task_index"],
-                        frame_id=data["frame_index"],
+                        frame_id=None,
                         episode_id=data["episode_index"],
-                        timestamp=data["timestamp"],
+                        timestamp=None,
                         subtask_pred=predicted_subtask,
                         score=score,
                         explanation=explanation,
                         extra_fields={
                             "task_name": data["task"],
+                            "subtask_explanation": predicted_explanation,
                         },
                     )
 

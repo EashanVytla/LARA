@@ -2,6 +2,7 @@ import importlib
 import os
 import logging
 from lara.data.dataset import DummyDataset
+from lara.data.task_prompt import TaskPrompt
 from pytorch_lightning import LightningDataModule
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
@@ -15,7 +16,7 @@ class BehaviorDataModule(LightningDataModule):
         self,
         *args,
         data_path: str,
-        task_name: str,
+        task_name: list[str],
         batch_size: int,
         val_batch_size: Optional[int],
         val_split_ratio: float,
@@ -42,6 +43,43 @@ class BehaviorDataModule(LightningDataModule):
         self._kwargs = kwargs
 
         self._train_dataset, self._val_dataset = None, None
+
+        # Initialize task prompt lookup
+        self._task_prompt_loader = TaskPrompt(self._data_path)
+
+    def _collate_with_task_prompts(self, batch_list):
+        """
+        Custom collate function that adds task prompts to the batch.
+
+        Looks up task prompts from episodes.jsonl using episode_index and adds them to the batch.
+        Task prompts are padded to match batch size.
+        """
+        from torch.utils.data.dataloader import default_collate
+
+        # Standard collation
+        batch = default_collate(batch_list)
+
+        # Extract episode indices from batch (should be a tensor)
+        episode_indices = batch.get("episode_index")
+
+        if episode_indices is not None:
+            # Convert to list of integers if it's a tensor
+            if hasattr(episode_indices, "tolist"):
+                episode_indices = episode_indices.tolist()
+            elif not isinstance(episode_indices, list):
+                episode_indices = [episode_indices]
+
+            # Get task prompts for each episode in the batch
+            task_prompts = []
+            for episode_idx in episode_indices:
+                prompts = self._task_prompt_loader.get_prompts(int(episode_idx))
+                # Take first prompt if multiple tasks, else empty string
+                prompt = prompts[0] if prompts else ""
+                task_prompts.append(prompt)
+
+            batch["task_prompt"] = task_prompts
+
+        return batch
 
     def setup(self, stage: str) -> None:
         if stage == "fit" or stage is None:
@@ -152,6 +190,7 @@ class BehaviorDataModule(LightningDataModule):
             pin_memory=True,
             persistent_workers=True,
             drop_last=True,
+            collate_fn=self._collate_with_task_prompts,
         )
 
     def val_dataloader(self) -> DataLoader:
@@ -163,6 +202,7 @@ class BehaviorDataModule(LightningDataModule):
             pin_memory=True,
             persistent_workers=True,
             drop_last=True,
+            collate_fn=self._collate_with_task_prompts,
         )
 
     def test_dataloader(self) -> DataLoader:
